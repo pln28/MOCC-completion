@@ -6,12 +6,6 @@ usePackage <- function(p) {
 
 usePackage("tidyverse")
 usePackage("ggplot2")
-usePackage("readxl")
-usePackage("MatchIt")
-usePackage("data.table")
-usePackage("stargazer")
-usePackage("sandwich")
-usePackage("lmtest")
 usePackage("caret")
 usePackage("pROC")
 usePackage("randomForest")
