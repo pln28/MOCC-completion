@@ -1,10 +1,25 @@
-library(tidyverse)
-library(ggcorrplot)
-library(caret)  
-library(pROC)
-library(randomForest)
-library(xgboost)
-library(Matrix)
+usePackage <- function(p) {
+  if (!is.element(p, installed.packages()[,1])) 
+    install.packages(p, dep = TRUE)
+  require(p, character.only = TRUE)
+}
+
+usePackage("tidyverse")
+usePackage("ggplot2")
+usePackage("readxl")
+usePackage("MatchIt")
+usePackage("data.table")
+usePackage("stargazer")
+usePackage("sandwich")
+usePackage("lmtest")
+usePackage("caret")
+usePackage("pROC")
+usePackage("randomForest")
+usePackage("xgboost")
+usePackage("Matrix")
+usePackage("shiny")
+usePackage("shinydashboard")
+usePackage("ggcorrplot")
 
 data <- read.csv("online_course_engagement_data.csv")
 #Inspect the dataset
@@ -212,9 +227,8 @@ cat("\nRandom Forest AUC:", auc(rf_roc), "\n")
 
 #Extract feature importance from Random Forest model
 importance <- as.data.frame(importance(rf_model))
-rownames(importance) <- c("TimeSpentOnCourse", "NumberOfVideosWatched", 
-                          "NumberOfQuizzesTaken", "QuizScores", "CompletionRate", "DeviceType")
-colnames(importance) <- c("MeanDecreaseAccuracy", "MeanDecreaseGini")
+importance$Feature <- c("TimeSpentOnCourse", "NumberOfVideosWatched", 
+                        "NumberOfQuizzesTaken", "QuizScores", "CompletionRate", "DeviceType")
 
 #Barplot: Feature Importance by Mean Decrease Gini
 ggplot(importance, aes(x = reorder(Feature, MeanDecreaseGini), y = MeanDecreaseGini)) +
@@ -228,8 +242,9 @@ ggplot(importance, aes(x = reorder(Feature, MeanDecreaseGini), y = MeanDecreaseG
 #Choose Random Forest as the final model
 #Visualize top features by course completion
 top_features <- c("CompletionRate", "NumberOfQuizzesTaken", "QuizScores")
+
 for (feature in top_features) {
-  ggplot(data, aes(x = .data[[feature]], fill = as.factor(CourseCompletion))) +
+  plot <- ggplot(data, aes(x = .data[[feature]], fill = as.factor(CourseCompletion))) +
     geom_histogram(position = "dodge", bins = 30) +
     theme_minimal() +
     labs(title = paste("Distribution of", feature, "by Course Completion"),
@@ -237,5 +252,103 @@ for (feature in top_features) {
          y = "Count",
          fill = "Course Completion") +
     scale_fill_discrete(name = "Course Completion")
+  
+  print(plot) #print each plot
 }
+
+#Save feature importance plot
+ggsave("feature_importance_random_forest.png", plot = last_plot())
+
+# Save feature-specific distributions
+for (feature in top_features) {
+  plot <- ggplot(data, aes(x = .data[[feature]], fill = as.factor(CourseCompletion))) +
+    geom_histogram(position = "dodge", bins = 30) +
+    theme_minimal() +
+    labs(title = paste("Distribution of", feature, "by Course Completion"),
+         x = feature,
+         y = "Count",
+         fill = "Course Completion") +
+    scale_fill_discrete(name = "Course Completion")
+  
+  ggsave(paste0(feature, "_distribution.png"), plot = plot)
+}
+
+# ----- Cross-Validation for Random Forest -----
+control <- trainControl(method = "cv", number = 5)
+
+#Train Random Forest model with cross-validation
+set.seed(123)
+rf_cv_model <- train(as.factor(CourseCompletion) ~ TimeSpentOnCourse + NumberOfVideosWatched + 
+                       NumberOfQuizzesTaken + QuizScores + CompletionRate + DeviceType,
+                     data = train_data,
+                     method = "rf",
+                     trControl = control,
+                     tuneLength = 3)
+print(rf_cv_model)
+
+#Performance on test data
+rf_cv_predictions <- predict(rf_cv_model, newdata = test_data)
+rf_cv_confusion <- confusionMatrix(rf_cv_predictions, as.factor(test_data$CourseCompletion))
+print(rf_cv_confusion)
+
+
+# ----- Dashboard -----
+data <- read.csv("online_course_engagement_data.csv")
+
+#UI
+ui <- dashboardPage(
+  dashboardHeader(title = "Course Completion Analysis"),
+  dashboardSidebar(
+    sidebarMenu(
+      menuItem("Feature Importance", tabName = "importance", icon = icon("bar-chart")),
+      menuItem("Feature Distributions", tabName = "distributions", icon = icon("area-chart"))
+    )
+  ),
+  dashboardBody(
+    tabItems(
+      #Tab for feature importance
+      tabItem(tabName = "importance",
+              fluidRow(
+                box(title = "Feature Importance (Random Forest)", status = "primary", solidHeader = TRUE,
+                    plotOutput("importancePlot", height = "400px"))
+              )),
+      
+      #Tab for feature distributions
+      tabItem(tabName = "distributions",
+              fluidRow(
+                box(title = "Distribution of Features by Course Completion", status = "primary", solidHeader = TRUE,
+                    selectInput("feature", "Select a Feature:", choices = c("CompletionRate", "NumberOfQuizzesTaken", "QuizScores")),
+                    plotOutput("distributionPlot", height = "400px"))
+              ))
+    )
+  )
+)
+
+server <- function(input, output) {
+  
+  #Render feature importance plot
+  output$importancePlot <- renderPlot({
+    ggplot(importance, aes(x = reorder(Feature, MeanDecreaseGini), y = MeanDecreaseGini)) +
+      geom_bar(stat = "identity", fill = "forestgreen") +
+      theme_minimal() +
+      coord_flip() +
+      labs(title = "Feature Importance: Random Forest",
+           x = "Feature",
+           y = "Mean Decrease Gini")
+  })
+  
+  #Render feature distribution plot
+  output$distributionPlot <- renderPlot({
+    ggplot(data, aes_string(x = input$feature, fill = "as.factor(CourseCompletion)")) +
+      geom_histogram(position = "dodge", bins = 30) +
+      theme_minimal() +
+      labs(title = paste("Distribution of", input$feature, "by Course Completion"),
+           x = input$feature,
+           y = "Count",
+           fill = "Course Completion")
+  })
+}
+
+#Run
+shinyApp(ui = ui, server = server)
 
