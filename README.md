@@ -45,7 +45,6 @@ The dataset contains the following key features:
 1. **CompletionRate**: Strongest predictor of course completion. Students with higher progress are more likely to complete the course.
 2. **NumberOfQuizzesTaken**: Quiz participation significantly correlates with course completion.
 3. **QuizScores**: Higher quiz scores indicate better engagement and understanding of the material.
-4. **NumberOfVideosWatched**: Watching more videos is associated with increased likelihood of completion.
 
 ## Recommendations
 1. **Encourage Quiz Participation**:
